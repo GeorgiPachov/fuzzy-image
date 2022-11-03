@@ -276,7 +276,7 @@ def crisp_denoise(image):
                 output[y][x] = (r_avg, g_avg, b_avg)
                   
     return output
-def test_and_compare(tests, max_h, noise_level, conorm_fn):
+def test_and_compare(tests, max_h, noise_level, conorm_fn, noise_max_intensity=63):
     vstacks = []
     for t in tqdm(tests):
         # Read and resize image
@@ -287,10 +287,12 @@ def test_and_compare(tests, max_h, noise_level, conorm_fn):
         img = resize(img, size=(size_w, size_h))
 
         # Introduce noise
+        
         noise = np.random.random(size=(img.shape[0], img.shape[1]))
         mask = noise < noise_level
         noisy = img.copy()
-        noisy[mask, :] = (0, 0, 0)
+        
+        noisy[mask] = (np.random.rand(mask.sum(), 3) * noise_max_intensity).astype(int)
 
         # Denoise openCV 
         denoised_nlmeans = cv2.fastNlMeansDenoisingColored(noisy,None,20,20,7,21) 
