@@ -301,11 +301,11 @@ def test_and_compare(tests, max_h, noise_level, conorm_fn, noise_max_intensity=6
         denoised_blur = blur(noisy)
         
         # Denoise (crisp)
-        # denoise_crisp = crisp_denoise(noisy)
+        denoised_crisp = crisp_denoise(noisy)
         
         # Denoised with fuzzy logic
         denoised_fuzzy = fuzzy_denoise(noisy, conorm_fn=conorm_fn)
-        vstack = np.vstack([img, noisy, denoised_nlmeans, denoised_blur, denoised_fuzzy])
+        vstack = np.vstack([img, noisy, denoised_nlmeans, denoised_blur, denoised_crisp, denoised_fuzzy])
         vstacks.append(vstack)
 
     grid = np.hstack(vstacks)
