@@ -132,7 +132,39 @@ class FuzzyColor:
         return r, g, b
     
     def to_rgb(_map):
-        r, g, b = _map[0], _map[33], _map[66]
+        radius=4
+        area_red = list(range(0,radius//2)) + list(range(101-radius//2, 101))
+        area_green = list(range(33-radius//2, 33+radius//2))
+        area_blue = list(range(66-radius//2, 66+radius//2))
+        
+        try:
+            assert len(area_red) == len(area_green) == len(area_blue)
+        except:
+            print(len(area_red))
+            print(len(area_green))
+            print(len(area_blue))
+            
+            print(area_red)
+            print(area_green)
+            print(area_blue)
+            raise
+            
+        sum_red = 0
+        for a in area_red:
+            sum_red += _map[a]
+        sum_red/=len(area_red)
+        
+        sum_green = 0
+        for a in area_green:
+            sum_green += _map[a]
+        sum_green/=len(area_green)
+            
+        sum_blue = 0
+        for a in area_blue:
+            sum_blue += _map[a]
+        sum_blue/=len(area_blue)
+            
+        r, g, b = sum_red, sum_green, sum_blue
         r = round(r*255)
         g = round(g*255)
         b = round(b*255)
@@ -232,22 +264,22 @@ def fuzzy_denoise(image, set_fn=tri_min, conorm_fn=prod, power_fn=FuzzyColor.pow
                 n = fuzzy_input[y][x-1]
                 neighbours.append(n)
                 
-            if 0 <= y+1 < fuzzy_input.shape[0] and 0 <= x+1 < fuzzy_input.shape[1]:
-                n = fuzzy_input[y+1][x+1]
-                neighbours.append(n)
+#             if 0 <= y+1 < fuzzy_input.shape[0] and 0 <= x+1 < fuzzy_input.shape[1]:
+#                 n = fuzzy_input[y+1][x+1]
+#                 neighbours.append(n)
             
-            if 0 <= y-1 < fuzzy_input.shape[0] and 0 <= x-1 < fuzzy_input.shape[1]:
-                n = fuzzy_input[y-1][x-1]
-                neighbours.append(n)
+#             if 0 <= y-1 < fuzzy_input.shape[0] and 0 <= x-1 < fuzzy_input.shape[1]:
+#                 n = fuzzy_input[y-1][x-1]
+#                 neighbours.append(n)
                 
-            if 0 <= y+1 < fuzzy_input.shape[0] and 0 <= x-1 < fuzzy_input.shape[1]:
-                n = fuzzy_input[y+1][x-1]
-                neighbours.append(n)
+#             if 0 <= y+1 < fuzzy_input.shape[0] and 0 <= x-1 < fuzzy_input.shape[1]:
+#                 n = fuzzy_input[y+1][x-1]
+#                 neighbours.append(n)
             
             
-            if 0 <= y-1 < fuzzy_input.shape[0] and 0 <= x+1 < fuzzy_input.shape[1]:
-                n = fuzzy_input[y-1][x+1]
-                neighbours.append(n)
+#             if 0 <= y-1 < fuzzy_input.shape[0] and 0 <= x+1 < fuzzy_input.shape[1]:
+#                 n = fuzzy_input[y-1][x+1]
+#                 neighbours.append(n)
 
 
             if len(neighbours) > 0:
@@ -322,6 +354,16 @@ def conorm_max(a, b):
 def conorm_avg(a, b):
     return (a+b)/2
 
+def conorm_add(a, b):
+    return min(1, a+b)
+
+def conorm_boom(a, b):
+    avg = (a+b)/2
+    if avg > 0.5:
+        return np.sqrt(avg)
+    else:
+        return avg**2
+
 def conorm_weighted_avg(a, b, gravity=0.1):
     coef = (1-gravity)/2
     return (coef*a + coef*b + gravity*0.5)
@@ -330,7 +372,13 @@ def power_minus(fc, n):
     return FuzzyColor.power(fc, max(0, n-1))
 
 def power_div2(fc, n):
-    return FuzzyColor.power(fc, max(0, round(n/2)))
+    return FuzzyColor.power(fc, max(0, n/2))
+
+def power_div3(fc, n):
+    return FuzzyColor.power(fc, max(0, n/3))
+
+def power_div4(fc, n):
+    return FuzzyColor.power(fc, max(0, n/4))
 
 def w2(a, b, lim=0.2):
     a1 = (a+b)/2
