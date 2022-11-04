@@ -24,10 +24,6 @@ def show_rgb(*img, figsize=(8, 3), title=''):
         plt.title(title)
         plt.show()
 
-# fuzzy-algo
-def max_conorm(a, b):
-    return max(a, b)
-
 def f(i):
     return round(100 * i)
     # return float("{:.2f}".format(i))
@@ -115,12 +111,12 @@ class FuzzyColor:
     def plot(self):
         show(self)
         
-    def power(self, n):
-        xs = self._fuzzy_color.keys()
-        ys = [self._fuzzy_color[c]**n for c in xs]
+    def power(fc, n):
+        xs = fc._fuzzy_color.keys()
+        ys = [fc._fuzzy_color[c]**n for c in xs]
         _map = dict(zip(xs, ys))
         r, g, b = FuzzyColor.to_rgb(_map)
-        return FuzzyColor((r, g, b), self._set_fn, self._conorm_fn)
+        return FuzzyColor((r, g, b), fc._set_fn, fc._conorm_fn)
             
     
     def __repr__(self):
@@ -214,7 +210,7 @@ class FuzzyImage:
         return FuzzyImage(rgb_image=None, fuzzy_image=self)
     
 
-def fuzzy_denoise(image, set_fn=tri_min, conorm_fn=prod):
+def fuzzy_denoise(image, set_fn=tri_min, conorm_fn=prod, power_fn=FuzzyColor.power):
     fuzzy_input = FuzzyImage(image, set_fn=set_fn, conorm_fn=conorm_fn)
     fuzzy_output = FuzzyImage(image, set_fn=set_fn, conorm_fn=conorm_fn)
     for y in range(fuzzy_input.shape[0]):
@@ -235,13 +231,31 @@ def fuzzy_denoise(image, set_fn=tri_min, conorm_fn=prod):
             if 0 <= x-1 < fuzzy_input.shape[1]:
                 n = fuzzy_input[y][x-1]
                 neighbours.append(n)
+                
+            if 0 <= y+1 < fuzzy_input.shape[0] and 0 <= x+1 < fuzzy_input.shape[1]:
+                n = fuzzy_input[y+1][x+1]
+                neighbours.append(n)
+            
+            if 0 <= y-1 < fuzzy_input.shape[0] and 0 <= x-1 < fuzzy_input.shape[1]:
+                n = fuzzy_input[y-1][x-1]
+                neighbours.append(n)
+                
+            if 0 <= y+1 < fuzzy_input.shape[0] and 0 <= x-1 < fuzzy_input.shape[1]:
+                n = fuzzy_input[y+1][x-1]
+                neighbours.append(n)
+            
+            
+            if 0 <= y-1 < fuzzy_input.shape[0] and 0 <= x+1 < fuzzy_input.shape[1]:
+                n = fuzzy_input[y-1][x+1]
+                neighbours.append(n)
+
 
             if len(neighbours) > 0:
                 result = neighbours[0]
                 for i in range(1, len(neighbours)):
                     result += neighbours[i]
 
-                averaged = result.power(len(neighbours))
+                averaged = power_fn(result, len(neighbours))
                 fuzzy_output[y][x] = averaged
                   
     return fuzzy_output.get_rgb()
@@ -276,7 +290,64 @@ def crisp_denoise(image):
                 output[y][x] = (r_avg, g_avg, b_avg)
                   
     return output
-def test_and_compare(tests, max_h, noise_level, conorm_fn, noise_max_intensity=63):
+
+def dark_noise_fn(img, noise_level, noise_max_intensity):
+    noise = np.random.random(size=(img.shape[0], img.shape[1]))
+    mask = noise < noise_level
+    noisy = img.copy()
+    noisy[mask] = (np.random.rand(mask.sum(), 3) * noise_max_intensity).astype(int)
+    return noisy
+
+def salt_and_pepper_noise(img, noise_level):
+    noise = np.random.random(size=(img.shape[0], img.shape[1]))
+    mask = noise < noise_level
+    noisy = img.copy()
+
+    rnd_values = (np.random.rand(mask.sum()) > 0.5) * 255
+    noisy[mask, 0] = noisy[mask, 1] = noisy[mask, 2] = rnd_values 
+    return noisy
+
+def rnd_noise(img, noise_level):
+    noise = np.random.random(size=(img.shape[0], img.shape[1]))
+    mask = noise < noise_level
+    noisy = img.copy()
+
+    rnd_values = np.random.rand(mask.sum(), 3) * 255
+    noisy[mask] = rnd_values
+    return noisy
+
+def conorm_max(a, b):
+    return min(1, max(a, b))
+    
+def conorm_avg(a, b):
+    return (a+b)/2
+
+def conorm_weighted_avg(a, b, gravity=0.1):
+    coef = (1-gravity)/2
+    return (coef*a + coef*b + gravity*0.5)
+
+def power_minus(fc, n):
+    return FuzzyColor.power(fc, max(0, n-1))
+
+def power_div2(fc, n):
+    return FuzzyColor.power(fc, max(0, round(n/2)))
+
+def w2(a, b, lim=0.2):
+    a1 = (a+b)/2
+    if a1 <= lim:
+        return a1*2
+    
+    if lim < a1 < (1-lim):
+        return lim*2 + a1*(1-4*lim)
+    
+    if a1 >= (1-lim):
+        return (1-2*lim) + (a1-(1-lim))*2
+
+def nothing(fc, n):
+    return fc
+    # return FuzzyColor.power(fc, max(0, round(n/2)))
+
+def test_and_compare(tests, max_h, set_fn, power_fn, conorm_fn, noise_fn):
     vstacks = []
     for t in tqdm(tests):
         # Read and resize image
@@ -287,13 +358,8 @@ def test_and_compare(tests, max_h, noise_level, conorm_fn, noise_max_intensity=6
         img = resize(img, size=(size_w, size_h))
 
         # Introduce noise
+        noisy = noise_fn(img)
         
-        noise = np.random.random(size=(img.shape[0], img.shape[1]))
-        mask = noise < noise_level
-        noisy = img.copy()
-        
-        noisy[mask] = (np.random.rand(mask.sum(), 3) * noise_max_intensity).astype(int)
-
         # Denoise openCV 
         denoised_nlmeans = cv2.fastNlMeansDenoisingColored(noisy,None,20,20,7,21) 
 
@@ -304,7 +370,7 @@ def test_and_compare(tests, max_h, noise_level, conorm_fn, noise_max_intensity=6
         denoised_crisp = crisp_denoise(noisy)
         
         # Denoised with fuzzy logic
-        denoised_fuzzy = fuzzy_denoise(noisy, conorm_fn=conorm_fn)
+        denoised_fuzzy = fuzzy_denoise(noisy, set_fn=set_fn, power_fn=power_fn, conorm_fn=conorm_fn)
         vstack = np.vstack([img, noisy, denoised_nlmeans, denoised_blur, denoised_crisp, denoised_fuzzy])
         vstacks.append(vstack)
 
