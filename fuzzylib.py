@@ -32,8 +32,8 @@ def f(i):
     return round(100 * i)
     # return float("{:.2f}".format(i))
 
-def inv(i):
-    return i/100
+def inv(i, scale=99):
+    return i/scale
 
 def prod(a, b):
     return a+b - a*b
@@ -45,7 +45,7 @@ def tri(x, color_intensity):
     else:
         return scale * 2 * (1-x)
     
-def tri_min(x, color_intensity, minimum=0.1):
+def tri_min(x, color_intensity, minimum=0.0):
     peak = color_intensity/255
     add = abs(0.5-x)/0.5 * minimum
     return min(minimum + (peak - minimum) * (0.5 - np.abs(0.5-x)) * 2, peak)
@@ -56,60 +56,50 @@ class FuzzyColor:
         r, g, b = rgb
         self._set_fn = fn
         self._conorm_fn = conorm_fn
+        scale = 99
         
         # initialize representation
         self._fuzzy_color = {}
-        for i in range(0, 101):
+        for i in range(0, scale):
             self._fuzzy_color[i] = 0.0
         
 #         # red 
         red = {}
-        for i in range(0, 101):
+        for i in range(0, scale):
             red[i] = fn(inv(i), r)
 
-#         # first range
         xs = red.keys()
         ys = [red[x] for x in xs]
-        xs = [round(x * 0.66) - 33 for x in xs]
+        xs = [round(x * 0.33) for x in xs]
         red_left_part = dict(zip(xs, ys))
 
-        for i in range(0, 34):
+        for i in range(0, 33):
             self._fuzzy_color[i] = red_left_part[i]
-        
-        # second range
-        xs = red.keys()
-        ys = [red[x] for x in xs]
-        xs = [round(x*0.66) + 66 for x in xs]
-        red_right_part = dict(zip(xs, ys))
-        for i in range(67, 101, 1):
-            self._fuzzy_color[i] = red_right_part[i]
         
         # green
         green = {}
-        for i in range(0, 101, 1):
+        for i in range(0, scale):
             green[i] = fn(inv(i), g)
         
         xs = green.keys()
         ys = [green[x] for x in xs]
-        xs = [round(x * 0.666) for x in xs]
+        xs = [round(x * 0.334) + 33 for x in xs]
         green_part = dict(zip(xs, ys))
-        
-        for i in range(0, 68, 1):
+
+        for i in range(33, 66):
             self._fuzzy_color[i] = max(self._fuzzy_color.get(i) or 0, green_part[i])
             
-        # blue 
-        # XXX Quantization error in blue channel
-        # FIXME use fidelity of 1000 to fix
         blue = {}
-        for i in range(0, 101, 1):
+        for i in range(0, scale):
             blue[i] = fn(inv(i), b)
             
         xs = blue.keys()
         ys = [blue[x] for x in xs]
     
-        xs = [round(x * 0.67) + 33 for x in xs]
+        xs = [round(x * 0.334) + 66 for x in xs]
+        print(xs)
         blue_part = dict(zip(xs, ys))
-        for i in range(33, 101, 1):
+        for i in range(66, scale):
             self._fuzzy_color[i] = max(self._fuzzy_color.get(i) or 0, blue_part[i])
             
     def plot(self):
@@ -136,11 +126,12 @@ class FuzzyColor:
         return r, g, b
     
     def to_rgb(_map):
-        r, g, b = _map[0], _map[33], _map[66]
+        r, g, b = _map[16], _map[49], _map[82]
         r = round(r*255)
         g = round(g*255)
         b = round(b*255)
         return r, g, b
+    
 
     def __add__(self, other):
         assert self._set_fn == other._set_fn
