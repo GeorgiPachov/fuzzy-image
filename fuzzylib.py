@@ -28,6 +28,17 @@ def show_rgb(*img, figsize=(8, 3), title=''):
 def max_conorm(a, b):
     return max(a, b)
 
+def conorm_einstein_sum(a, b):
+    return (a + b)/(1 +a*b)
+
+def conorm_less_than_prod(a, b):
+    return np.sqrt(a*a + b*b - a*a*b*b)
+
+def conorm_between_standard_light(a, b):
+    score_1 = conorm_prod(a, b)
+    score_2 = conorm_einstein_sum(a, b)
+    return score_1 * 0.5 + score_2 * 0.5
+
 def f(i):
     return round(100 * i)
     # return float("{:.2f}".format(i))
@@ -35,7 +46,7 @@ def f(i):
 def inv(i, scale=99):
     return i/scale
 
-def prod(a, b):
+def conorm_prod(a, b):
     return a+b - a*b
 
 def tri(x, color_intensity):
@@ -50,37 +61,40 @@ def tri_min(x, color_intensity, minimum=0.0):
     add = abs(0.5-x)/0.5 * minimum
     return min(minimum + (peak - minimum) * (0.5 - np.abs(0.5-x)) * 2, peak)
 
+def block(x, color_intensity):
+    return color_intensity/255
+
 class FuzzyColor:
-    def __init__(self, rgb, fn=tri_min, conorm_fn=prod):
+    def __init__(self, rgb, fn=tri_min, conorm_fn=conorm_prod):
         # save original representation 
         r, g, b = rgb
         self._set_fn = fn
         self._conorm_fn = conorm_fn
         scale = 99
-        
+
         # initialize representation
         self._fuzzy_color = {}
         for i in range(0, scale):
             self._fuzzy_color[i] = 0.0
-        
-#         # red 
+
+#         # red
         red = {}
         for i in range(0, scale):
             red[i] = fn(inv(i), r)
 
         xs = red.keys()
         ys = [red[x] for x in xs]
-        xs = [round(x * 0.33) for x in xs]
+        xs = [round(x * 0.334) for x in xs]
         red_left_part = dict(zip(xs, ys))
 
         for i in range(0, 33):
             self._fuzzy_color[i] = red_left_part[i]
-        
+
         # green
         green = {}
         for i in range(0, scale):
             green[i] = fn(inv(i), g)
-        
+
         xs = green.keys()
         ys = [green[x] for x in xs]
         xs = [round(x * 0.334) + 33 for x in xs]
@@ -88,16 +102,15 @@ class FuzzyColor:
 
         for i in range(33, 66):
             self._fuzzy_color[i] = max(self._fuzzy_color.get(i) or 0, green_part[i])
-            
+
         blue = {}
         for i in range(0, scale):
             blue[i] = fn(inv(i), b)
-            
+
         xs = blue.keys()
         ys = [blue[x] for x in xs]
-    
+
         xs = [round(x * 0.334) + 66 for x in xs]
-        print(xs)
         blue_part = dict(zip(xs, ys))
         for i in range(66, scale):
             self._fuzzy_color[i] = max(self._fuzzy_color.get(i) or 0, blue_part[i])
@@ -110,7 +123,9 @@ class FuzzyColor:
         ys = [self._fuzzy_color[c]**n for c in xs]
         _map = dict(zip(xs, ys))
         r, g, b = FuzzyColor.to_rgb(_map)
-        return FuzzyColor((r, g, b), self._set_fn, self._conorm_fn)
+        fc = FuzzyColor((r, g, b), self._set_fn, self._conorm_fn)
+        fc._fuzzy_color = _map
+        return fc
             
     
     def __repr__(self):
@@ -126,12 +141,23 @@ class FuzzyColor:
         return r, g, b
     
     def to_rgb(_map):
-        r, g, b = _map[16], _map[49], _map[82]
-        r = round(r*255)
-        g = round(g*255)
-        b = round(b*255)
+        red_sum = 0
+        for i in range(0, 33):
+            red_sum += _map[i]
+
+        green_sum = 0
+        for i in range(33, 66):
+            green_sum += _map[i]
+
+        blue_sum = 0
+        for i in range(66, 99):
+            blue_sum += _map[i]
+
+        max_sum = (33*1)/2
+        r = min(255, round((red_sum / max_sum) * 255))
+        g = min(255, round((green_sum/ max_sum) * 255))
+        b = min(255, round((blue_sum / max_sum) * 255))
         return r, g, b
-    
 
     def __add__(self, other):
         assert self._set_fn == other._set_fn
@@ -145,11 +171,10 @@ class FuzzyColor:
             cv = self._conorm_fn(av, bv)
             _map[i] = cv
 
-        r, g, b = _map[0], _map[33], _map[66]
-        r = round(r*255)
-        g = round(g*255)
-        b = round(b*255)
-        return FuzzyColor((r, g, b), self._set_fn, self._conorm_fn)
+        r, g, b = FuzzyColor.to_rgb(_map)
+        fc = FuzzyColor((r, g, b), self._set_fn, self._conorm_fn)
+        fc._fuzzy_color = _map
+        return fc
         
         
 def show(*fc, figsize=(8, 3)):
@@ -157,13 +182,13 @@ def show(*fc, figsize=(8, 3)):
     for f in fc:
         xs = f._fuzzy_color.keys()
         ys = [f._fuzzy_color[x] for x in xs]
-        plt.plot(np.array(list(xs))/100, ys)
+        plt.plot(np.array(list(xs)), ys)
     plt.legend(range(len(fc)))
-    plt.xlim((0, 1))
+    plt.xlim((0, 100))
     plt.ylim((0, 1))
 
 class FuzzyImage:
-    def __init__(self, rgb_image, set_fn=tri_min, conorm_fn=prod, fuzzy_image=None):
+    def __init__(self, rgb_image, set_fn=tri_min, conorm_fn=conorm_prod, fuzzy_image=None):
         if fuzzy_image is None:
             self.input = rgb_image
             self.set_fn = set_fn
@@ -205,11 +230,12 @@ class FuzzyImage:
         return FuzzyImage(rgb_image=None, fuzzy_image=self)
     
 
-def fuzzy_denoise(image, set_fn=tri_min, conorm_fn=prod):
+def fuzzy_denoise(image, set_fn=tri_min, conorm_fn=conorm_prod):
     fuzzy_input = FuzzyImage(image, set_fn=set_fn, conorm_fn=conorm_fn)
     fuzzy_output = FuzzyImage(image, set_fn=set_fn, conorm_fn=conorm_fn)
     for y in range(fuzzy_input.shape[0]):
         for x in range(fuzzy_input.shape[1]):
+            # neighbours = [fuzzy_input[y][x]]
             neighbours = []
             if 0 <= y+1 < fuzzy_input.shape[0]:
                 n = fuzzy_input[y+1][x]
