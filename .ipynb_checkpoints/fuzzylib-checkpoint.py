@@ -32,8 +32,8 @@ def f(i):
     return round(100 * i)
     # return float("{:.2f}".format(i))
 
-def inv(i):
-    return i/100
+def inv(i, scale=102):
+    return i/scale
 
 def prod(a, b):
     return a+b - a*b
@@ -59,57 +59,48 @@ class FuzzyColor:
         
         # initialize representation
         self._fuzzy_color = {}
-        for i in range(0, 101):
+        for i in range(0, 90):
             self._fuzzy_color[i] = 0.0
         
 #         # red 
         red = {}
-        for i in range(0, 101):
+        for i in range(0, 102):
             red[i] = fn(inv(i), r)
 
 #         # first range
         xs = red.keys()
         ys = [red[x] for x in xs]
-        xs = [round(x * 0.66) - 33 for x in xs]
+        xs = [round(x * 0.33) for x in xs]
         red_left_part = dict(zip(xs, ys))
 
         for i in range(0, 34):
             self._fuzzy_color[i] = red_left_part[i]
         
-        # second range
-        xs = red.keys()
-        ys = [red[x] for x in xs]
-        xs = [round(x*0.66) + 66 for x in xs]
-        red_right_part = dict(zip(xs, ys))
-        for i in range(67, 101, 1):
-            self._fuzzy_color[i] = red_right_part[i]
         
         # green
         green = {}
-        for i in range(0, 101, 1):
+        for i in range(0, 102):
             green[i] = fn(inv(i), g)
         
         xs = green.keys()
         ys = [green[x] for x in xs]
-        xs = [round(x * 0.666) for x in xs]
+        xs = [round(x * 0.334) + 33 for x in xs]
         green_part = dict(zip(xs, ys))
+        print(green_part)
         
-        for i in range(0, 68, 1):
+        for i in range(34, 68):
             self._fuzzy_color[i] = max(self._fuzzy_color.get(i) or 0, green_part[i])
             
-        # blue 
-        # XXX Quantization error in blue channel
-        # FIXME use fidelity of 1000 to fix
         blue = {}
-        for i in range(0, 101, 1):
+        for i in range(0, 102):
             blue[i] = fn(inv(i), b)
             
         xs = blue.keys()
         ys = [blue[x] for x in xs]
     
-        xs = [round(x * 0.67) + 33 for x in xs]
+        xs = [round(x * 0.33) + 66 for x in xs]
         blue_part = dict(zip(xs, ys))
-        for i in range(33, 101, 1):
+        for i in range(68, 102):
             self._fuzzy_color[i] = max(self._fuzzy_color.get(i) or 0, blue_part[i])
             
     def plot(self):
@@ -276,7 +267,7 @@ def crisp_denoise(image):
                 output[y][x] = (r_avg, g_avg, b_avg)
                   
     return output
-def test_and_compare(tests, max_h, noise_level, conorm_fn):
+def test_and_compare(tests, max_h, noise_level, conorm_fn, noise_max_intensity=63):
     vstacks = []
     for t in tqdm(tests):
         # Read and resize image
@@ -287,10 +278,12 @@ def test_and_compare(tests, max_h, noise_level, conorm_fn):
         img = resize(img, size=(size_w, size_h))
 
         # Introduce noise
+        
         noise = np.random.random(size=(img.shape[0], img.shape[1]))
         mask = noise < noise_level
         noisy = img.copy()
-        noisy[mask, :] = (0, 0, 0)
+        
+        noisy[mask] = (np.random.rand(mask.sum(), 3) * noise_max_intensity).astype(int)
 
         # Denoise openCV 
         denoised_nlmeans = cv2.fastNlMeansDenoisingColored(noisy,None,20,20,7,21) 
@@ -299,11 +292,11 @@ def test_and_compare(tests, max_h, noise_level, conorm_fn):
         denoised_blur = blur(noisy)
         
         # Denoise (crisp)
-        # denoise_crisp = crisp_denoise(noisy)
+        denoised_crisp = crisp_denoise(noisy)
         
         # Denoised with fuzzy logic
         denoised_fuzzy = fuzzy_denoise(noisy, conorm_fn=conorm_fn)
-        vstack = np.vstack([img, noisy, denoised_nlmeans, denoised_blur, denoised_fuzzy])
+        vstack = np.vstack([img, noisy, denoised_nlmeans, denoised_blur, denoised_crisp, denoised_fuzzy])
         vstacks.append(vstack)
 
     grid = np.hstack(vstacks)
